@@ -1,0 +1,114 @@
+1. First open the DatasetParser.xcode project and then just drag the NETDataset folder to your project. Next you simply  go to your view controller and include the CacheDBCommands.h file to your viewController.h file
+
+#import "CacheDBCommands.h"
+
+2. Add the CacheDBDelegate to your view controllers header file
+
+@interface DatasetParserViewController : UITableViewController <CacheDBDelegate> {
+
+3. Create a property/Variable in your view controller for the cachedb class
+
+CacheDBCommands *cacheDB;
+@property(nonatomic, retain)CacheDBCommands *cacheDB;
+
+4.Initialize cachedb and set delegate in your view controllers viewDidLoad event
+
+cacheDB = [[CacheDBCommands alloc] init];
+cacheDB.delegate = self;
+
+5.Call your download function from the view controller
+
+[cacheDB initDownloadMyDataset:@"param1Value" Param2:@"pram2Value"];
+
+6. Modify the CacheDBCommands class to  suit your needs
+
+The initDownloadMyDataset function is simply a handler method that creates a new Asynchronous operation for your actual method call. This way your app doesnt hang waiting for a response. It creates an NSInvocationOperation which contains your actual working method and adds it to the NSOperationQueue.  We pass any parameters along with the operation, since the NSOperation only accepts a single object for parameters, we need to create an array of parameters and pass the single array object along if we have more than one parameter for our worker method.
+
+In the example the working operation method is called getMyDataset and it accepts the single array parameter that we passed to the NSInvocationOperation.
+
+This method is where the actual connection to the server is made and the data passed to the web service.
+Lets break it down! o/< o|< o\<
+ok all dancing aside…
+first we get our parameters out of the array
+
+NSString *param1 = [params objectAtIndex:0];
+NSString *param2 = [params objectAtIndex:1];
+
+Next we create a WebServiceHelper to make our connection to the server
+
+// Create an object to the class above which is the connection to the WCF Service
+WebServiceHelper *DataCon = [[WebServiceHelper alloc] init];
+
+Now we set the connection info which includes the XMLNamespace (which must match EXACTLY to what you have set in your web service)
+
+//set up service method and urls
+DataCon.XMLNameSpace = self.XMLNamespace;
+DataCon.XMLURLAddress = self.ServerURL;
+
+Next we need to specify which method in the web service we want to invoke. Now the most important thing to remember is the method name and its parameters must
+also match EXACTLY to what you have in your web service.
+
+//set up method and parameters
+DataCon.MethodName = @"getMyDataset";
+
+
+DataCon.MethodParameters = [[NSMutableDictionary alloc] init];
+[DataCon.MethodParameters setObject:param1 forKey:@"param1"];
+[DataCon.MethodParameters setObject:param2 forKey:@"param2"];
+
+This next part simply initiates the call and downloads the response as raw data into the NSMutableData object
+
+NSMutableData *retData;
+retData = [DataCon initiateConnection];
+
+Now that we have our data we want to make it into something useful, like a dataset! This is where the Dataset and XMLDatasetParser classes do their magic!
+If you wanted to instead retrieve something else like a string or a boolean or an integer from your service method, you would need to write your own NSXMLParser class to handle those. I have not had a need for this yet as I am fine with just passing back datasets. If you do end up writing one email it to me and I will add it to the NETDataset project 
+If you uncomment the doDebug line you will get the XML returned from the soap service NSLogged to the console. This becomes very useful when debugging.
+once parseXMLWithData is called the dataset object will now contain the tables and rows from your dataset.
+
+//self.myDataset.doDebug = YES; //uncomment to print all data to NSLog
+[self.myDataset parseXMLWithData:retData];
+
+
+[DataCon release];
+
+The last step in the cacheDbCommands class is to call our delegate function which lets the View Controller know we are done downloading the dataset and we have our data!
+
+//call delegate to let view know we have finished downloading this
+[delegate performSelectorOnMainThread:@selector(didFinishDownloading:)
+withObject:self
+waitUntilDone:NO];
+
+7.Handle the delegate callback events
+
+#pragma mark -
+#pragma mark CacheDBCommands Delegate
+
+- (void)willStartDownloading:(CacheDBCommands *)cacheDB
+{
+//NSLog(@"Delegate called start downloading", nil);
+[self.act startAnimating];
+self.act.hidden = NO;
+}
+-(void)didFinishDownloading:(CacheDBCommands *)acacheDB
+{
+//NSLog(@"Delegate called finish downloading", nil);
+
+NSMutableDictionary *rows = [[NSMutableDictionary alloc] initWithDictionary:[cacheDB.myDataset getRowsForTable:@"Table1"]];
+//each object in the rows dictionary contains a Key which is the rowid number and the value is a corresponding array of columns and values
+NSArray *rowValues = [[NSMutableArray alloc] initWithArray:[rows allValues]];
+//each object in the rowValues array is a dictionary object containing all of the columns and values
+NSMutableArray *data = [[NSMutableArray alloc] initWithArray:rowValues];
+
+
+[rows release];
+[self.tableView reloadData];
+[self.act stopAnimating];
+}
+
+8. Do what you want! Your Done!
+You can also query the dataset for a value using the function getRowsForTableWhereColumnEquals I often use this to join two tables together or use the first table as a section header in the tableview and the second table as the data
+
+This accepts 3 parameters TableName ColumnName and Searchstring
+
+NSMutableArray *filteredData= [[NSMutableArray alloc] initWithArray:[cacheDB.myDataset getRowsForTableWhereColumnEquals:@"Table1" Column:@"Column1" Where:@"happyfish"]]];
