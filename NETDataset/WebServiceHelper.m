@@ -69,8 +69,8 @@
     [request setHTTPBody:[sRequest dataUsingEncoding:NSUTF8StringEncoding]];
 	[sRequest release];
    	
-	NSError *WSerror;
-	NSURLResponse *WSresponse;
+	NSError *WSerror = nil;
+	NSURLResponse *WSresponse = nil;
 	// Call the xml service and return response into a MutableData object
 	NSMutableData *myMutableData = (NSMutableData *)[NSURLConnection sendSynchronousRequest:request returningResponse:&WSresponse error:&WSerror];
 	if (WSerror) {
